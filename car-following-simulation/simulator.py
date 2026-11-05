@@ -6,8 +6,18 @@ from vehicle_idm import IDMVehicle
 
 
 class Simulator:
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        llm_vehicle_factory=None,
+        llm_vehicle_id=2,
+        llm_vehicle_kwargs=None,
+    ):
         self.config = config
+        self.llm_vehicle_factory = llm_vehicle_factory
+        self.llm_vehicle_id = llm_vehicle_id
+        self.llm_vehicle_kwargs = llm_vehicle_kwargs or {}
+        self.llm_vehicles = []
         self.vehicles = []
         self.next_generation_time = 0.0
 
@@ -69,7 +79,19 @@ class Simulator:
                 return
 
         vehicle_id = len(self.vehicles) + 1
-        vehicle = IDMVehicle(self.config, vehicle_id, vehicle_front)
+        if (
+            self.llm_vehicle_factory is not None
+            and vehicle_id == self.llm_vehicle_id
+        ):
+            vehicle = self.llm_vehicle_factory(
+                self.config,
+                vehicle_id,
+                vehicle_front,
+                **self.llm_vehicle_kwargs,
+            )
+            self.llm_vehicles.append(vehicle)
+        else:
+            vehicle = IDMVehicle(self.config, vehicle_id, vehicle_front)
         vehicle.record_state(current_time)
         self.vehicles.append(vehicle)
 

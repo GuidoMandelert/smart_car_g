@@ -91,3 +91,33 @@ cd car-following-simulation
 
 The tests are separate from the teaching workflow and do not run when
 `main.py` is executed.
+
+## Optional local Ollama vehicle-control experiment
+
+The standard run remains IDM. To use the isolated local Ollama controller for
+vehicle 2 while every other vehicle remains IDM, run from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe car-following-simulation\main.py `
+  --experiment 1 `
+  --time-max 5 `
+  --controller ollama `
+  --llm-vehicle-id 2 `
+  --llm-model qwen3:4b `
+  --llm-decision-interval-steps 50 `
+  --llm-timeout-seconds 300 `
+  --output evidence\ollama-vehicle-2-exp1.png `
+  --no-show
+```
+
+Ollama must be installed, running locally, and have the selected model
+downloaded. This short run gives vehicle 2 a leader and normally makes one
+model request. Increase `--time-max` to study a longer trajectory; a request is
+made every 50 simulation steps by default. Local model responses are
+synchronous, so each request pauses the simulation until it returns or times
+out. Every other vehicle remains IDM to keep inference costs manageable.
+
+The console reports the selected vehicle's request count, IDM fallback count,
+and final state. IDM remains the default controller; omitting
+`--controller ollama` preserves the usual simulation behavior. Use the same
+experiment, duration, and seed when comparing IDM and Ollama runs.

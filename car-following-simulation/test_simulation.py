@@ -72,6 +72,35 @@ class SimulationTests(unittest.TestCase):
         second = self._run_signature()
         self.assertEqual(first, second)
 
+    def test_selected_vehicle_factory_is_opt_in_and_other_vehicles_use_idm(self):
+        class FakeLLMVehicle(IDMVehicle):
+            pass
+
+        config = Config(seed=1, experiment=1, time_max=5.0)
+        simulator = Simulator(
+            config,
+            llm_vehicle_factory=FakeLLMVehicle,
+            llm_vehicle_id=2,
+        )
+
+        simulator._generate_vehicle(current_time=0.0)
+        simulator.vehicles[0].position = 50.0
+        simulator._generate_vehicle(current_time=2.0)
+
+        self.assertIsInstance(simulator.vehicles[0], IDMVehicle)
+        self.assertNotIsInstance(simulator.vehicles[0], FakeLLMVehicle)
+        self.assertIsInstance(simulator.vehicles[1], FakeLLMVehicle)
+        self.assertEqual(simulator.llm_vehicles, [simulator.vehicles[1]])
+        self.assertIs(simulator.vehicles[1].vehicle_front, simulator.vehicles[0])
+
+    def test_default_simulator_still_creates_only_idm_vehicles(self):
+        config = Config(seed=1, experiment=1, time_max=5.0)
+        simulator = Simulator(config)
+        simulator._generate_vehicle(current_time=0.0)
+
+        self.assertIs(type(simulator.vehicles[0]), IDMVehicle)
+        self.assertEqual(simulator.llm_vehicles, [])
+
     def _run_signature(self):
         config = Config(seed=7, experiment=4, time_max=250.0)
         simulator = Simulator(config)
