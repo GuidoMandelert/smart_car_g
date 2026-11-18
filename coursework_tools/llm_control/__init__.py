@@ -1,1 +1,1 @@
-"""Isolated experimental vehicle controllers for coursework exploration."""
+"""Optional LLM-based coursework controllers."""

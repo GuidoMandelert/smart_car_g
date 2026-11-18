@@ -72,7 +72,7 @@ class SimulationTests(unittest.TestCase):
         second = self._run_signature()
         self.assertEqual(first, second)
 
-    def test_selected_vehicle_factory_is_opt_in_and_other_vehicles_use_idm(self):
+    def test_selected_vehicle_factory_controls_consecutive_vehicle_range(self):
         class FakeLLMVehicle(IDMVehicle):
             pass
 
@@ -81,19 +81,27 @@ class SimulationTests(unittest.TestCase):
             config,
             llm_vehicle_factory=FakeLLMVehicle,
             llm_vehicle_id=2,
+            llm_vehicle_count=3,
         )
 
-        simulator._generate_vehicle(current_time=0.0)
-        simulator.vehicles[0].position = 50.0
-        simulator._generate_vehicle(current_time=2.0)
+        for vehicle_number in range(1, 6):
+            if simulator.vehicles:
+                simulator.vehicles[-1].position = 100.0
+            simulator._generate_vehicle(current_time=(vehicle_number - 1) * 2.0)
 
-        self.assertIsInstance(simulator.vehicles[0], IDMVehicle)
-        self.assertNotIsInstance(simulator.vehicles[0], FakeLLMVehicle)
-        self.assertIsInstance(simulator.vehicles[1], FakeLLMVehicle)
-        self.assertEqual(simulator.llm_vehicles, [simulator.vehicles[1]])
+        self.assertIs(type(simulator.vehicles[0]), IDMVehicle)
+        self.assertTrue(
+            all(type(vehicle) is FakeLLMVehicle for vehicle in simulator.vehicles[1:4])
+        )
+        self.assertIs(type(simulator.vehicles[4]), IDMVehicle)
+        self.assertEqual(simulator.llm_vehicles, simulator.vehicles[1:4])
         self.assertIs(simulator.vehicles[1].vehicle_front, simulator.vehicles[0])
 
-    def test_default_simulator_still_creates_only_idm_vehicles(self):
+    def test_vehicle_factory_rejects_nonpositive_count(self):
+        with self.assertRaisesRegex(ValueError, "llm_vehicle_count"):
+            Simulator(Config(time_max=1.0), llm_vehicle_count=0)
+
+    def test_default_simulator_creates_only_idm_vehicles(self):
         config = Config(seed=1, experiment=1, time_max=5.0)
         simulator = Simulator(config)
         simulator._generate_vehicle(current_time=0.0)

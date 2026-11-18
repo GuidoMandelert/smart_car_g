@@ -11,11 +11,17 @@ class Simulator:
         config,
         llm_vehicle_factory=None,
         llm_vehicle_id=2,
+        llm_vehicle_count=1,
         llm_vehicle_kwargs=None,
     ):
+        if llm_vehicle_id < 1:
+            raise ValueError("llm_vehicle_id must be positive")
+        if llm_vehicle_count < 1:
+            raise ValueError("llm_vehicle_count must be positive")
         self.config = config
         self.llm_vehicle_factory = llm_vehicle_factory
         self.llm_vehicle_id = llm_vehicle_id
+        self.llm_vehicle_count = llm_vehicle_count
         self.llm_vehicle_kwargs = llm_vehicle_kwargs or {}
         self.llm_vehicles = []
         self.vehicles = []
@@ -81,7 +87,9 @@ class Simulator:
         vehicle_id = len(self.vehicles) + 1
         if (
             self.llm_vehicle_factory is not None
-            and vehicle_id == self.llm_vehicle_id
+            and self.llm_vehicle_id
+            <= vehicle_id
+            < self.llm_vehicle_id + self.llm_vehicle_count
         ):
             vehicle = self.llm_vehicle_factory(
                 self.config,

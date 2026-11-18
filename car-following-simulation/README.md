@@ -92,32 +92,61 @@ cd car-following-simulation
 The tests are separate from the teaching workflow and do not run when
 `main.py` is executed.
 
-## Optional local Ollama vehicle-control experiment
+## Optional DeepSeek vehicle-control experiment
 
-The standard run remains IDM. To use the isolated local Ollama controller for
-vehicle 2 while every other vehicle remains IDM, run from the repository root:
+The simulation uses IDM by default and makes no API calls unless
+`--controller deepseek` is selected. By default DeepSeek controls vehicle 2
+only; all other vehicles continue using IDM. To control a consecutive range,
+set `--llm-vehicle-count`. The default first vehicle ID is 2, leaving vehicle 1
+under IDM as a lead vehicle.
 
-```powershell
-.\.venv\Scripts\python.exe car-following-simulation\main.py `
-  --experiment 1 `
-  --time-max 5 `
-  --controller ollama `
-  --llm-vehicle-id 2 `
-  --llm-model qwen3:4b `
-  --llm-decision-interval-steps 50 `
-  --llm-timeout-seconds 300 `
-  --output evidence\ollama-vehicle-2-exp1.png `
-  --no-show
-```
+1. Create an API key in the [DeepSeek platform](https://platform.deepseek.com/api_keys).
+   Do not paste the key into chat or commit it to source control.
+2. Put the key in `car-following-simulation\.env`:
 
-Ollama must be installed, running locally, and have the selected model
-downloaded. This short run gives vehicle 2 a leader and normally makes one
-model request. Increase `--time-max` to study a longer trajectory; a request is
-made every 50 simulation steps by default. Local model responses are
-synchronous, so each request pauses the simulation until it returns or times
-out. Every other vehicle remains IDM to keep inference costs manageable.
+   ```text
+   DEEPSEEK_API_KEY=your_key_goes_here
+   ```
 
-The console reports the selected vehicle's request count, IDM fallback count,
-and final state. IDM remains the default controller; omitting
-`--controller ollama` preserves the usual simulation behavior. Use the same
-experiment, duration, and seed when comparing IDM and Ollama runs.
+   The root `.gitignore` excludes `.env` files. A shell environment variable
+   named `DEEPSEEK_API_KEY` can also be used and takes precedence.
+3. From the repository root, install the simulator dependencies:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m pip install -r car-following-simulation\requirements.txt
+   ```
+4. Run a short opt-in test:
+
+   ```powershell
+   .\.venv\Scripts\python.exe car-following-simulation\main.py `
+     --experiment 1 `
+     --time-max 200 `
+     --controller deepseek `
+     --llm-first-vehicle-id 2 `
+     --llm-vehicle-count 10 `
+     --llm-model deepseek-flash `
+     --llm-decision-interval-steps 200 `
+     --output evidence\deepseek-vehicles-2-to-11-exp1.png `
+     --no-show
+   ```
+
+To select 50 consecutive vehicles instead, use
+`--llm-vehicle-count 50`; with the default first ID of 2 this selects IDs 2
+through 51. The old `--llm-vehicle-id` option remains as an alias for choosing
+the first selected ID.
+
+The controller requests an acceleration recommendation every 200 simulation
+steps in the example (20 simulated seconds at a 0.1-second timestep). API
+responses are synchronous and usage is billed by tokens; consult
+[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing) before
+long experiments. As a rough planning estimate for a 400-second Experiment 1
+run at that interval, the IDM baseline vehicle lifetimes imply about 147
+requests for IDs 2-11 and about 785 for IDs 2-51. These are estimates, not
+guaranteed totals; DeepSeek decisions may change vehicle lifetimes and traffic
+generation. The controller limits actions to the simulator's acceleration
+bounds and falls back to IDM if a request or response fails. This is a
+coursework simulation, not a safety-certified real-vehicle controller.
+
+To turn DeepSeek off, omit `--controller deepseek` (IDM is the default). The
+offline tests for the controller use mocked API responses and do not incur API
+charges.
