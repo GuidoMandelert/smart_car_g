@@ -6,9 +6,15 @@ import random
 class Config:
     """Keep the experiment settings in one easy-to-edit class."""
 
+    DEFAULT_SEED = 1
     DEFAULT_TIME_MAX = 1000.0
 
-    def __init__(self, seed=1, experiment=1, time_max=DEFAULT_TIME_MAX):
+    def __init__(
+        self,
+        seed=DEFAULT_SEED,
+        experiment=1,
+        time_max=DEFAULT_TIME_MAX,
+    ):
         if experiment not in [1, 2, 3, 4]:
             raise ValueError("experiment must be 1, 2, 3, or 4")
         if time_max <= 0:

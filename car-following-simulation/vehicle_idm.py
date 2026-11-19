@@ -15,9 +15,21 @@ class IDMVehicle(Vehicle):
         self.acceleration_exponent = config.idm_acceleration_exponent
         self.relative_speed_noise = config.relative_speed_noise
 
-    def update_acceleration(self):
+    def update_acceleration(self, desired_speed=None):
         """Calculate IDM acceleration from the current traffic state."""
-        desired_speed = self.current_speed_limit
+        if desired_speed is None:
+            desired_speed = self.current_speed_limit
+        else:
+            desired_speed = max(
+                0.0,
+                min(desired_speed, self.current_speed_limit),
+            )
+
+        if desired_speed == 0.0:
+            self.acceleration = (
+                -self.maximum_deceleration if self.speed > 0.0 else 0.0
+            )
+            return
 
         # Free-road term: accelerate toward the desired speed.
         free_road_term = (self.speed / desired_speed) ** self.acceleration_exponent

@@ -66,6 +66,13 @@ class DeepSeekLLMVehicle(IDMVehicle):
 
         self.llm_request_count = 0
         self.idm_fallback_count = 0
+        self.safety_filter_interventions = 0
+        self.safety_margin_unachievable_steps = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+        self.usage_reported_request_count = 0
+        self.usage_missing_request_count = 0
         self._steps_until_request = 0
         self._cached_acceleration = None
 
@@ -96,8 +103,11 @@ class DeepSeekLLMVehicle(IDMVehicle):
 
         if self._cached_acceleration is None:
             super().update_acceleration()
+            recommended_acceleration = self.acceleration
         else:
-            self.acceleration = self._cached_acceleration
+            recommended_acceleration = self._cached_acceleration
+
+        self.acceleration = self._apply_safety_filter(recommended_acceleration)
 
     def get_observation(self):
         leader = self.vehicle_front
@@ -121,7 +131,95 @@ class DeepSeekLLMVehicle(IDMVehicle):
             "front_speed": front_speed,
             "minimum_acceleration": -self.maximum_deceleration,
             "maximum_acceleration": self.maximum_acceleration,
+            "minimum_gap": self.minimum_spacing,
         }
+
+    def _apply_safety_filter(self, recommended_acceleration):
+        """Cap actions that would violate the predicted stopping-gap condition."""
+        acceleration = max(
+            -self.maximum_deceleration,
+            min(recommended_acceleration, self.maximum_acceleration),
+        )
+        leader = self.vehicle_front
+        if leader is None or not leader.active:
+            return acceleration
+
+        lower = -self.maximum_deceleration
+        upper = self.maximum_acceleration
+        lower_margin = self._predicted_safety_margin(lower, leader)
+        if lower_margin < 0.0:
+            safe_upper_bound = lower
+            self.safety_margin_unachievable_steps += 1
+        elif self._predicted_safety_margin(upper, leader) >= 0.0:
+            safe_upper_bound = upper
+        else:
+            low = lower
+            high = upper
+            for _ in range(40):
+                midpoint = 0.5 * (low + high)
+                if self._predicted_safety_margin(midpoint, leader) >= 0.0:
+                    low = midpoint
+                else:
+                    high = midpoint
+            safe_upper_bound = low
+
+        safe_acceleration = min(acceleration, safe_upper_bound)
+        if safe_acceleration < acceleration - 1e-9:
+            self.safety_filter_interventions += 1
+        return safe_acceleration
+
+    def _predicted_safety_margin(self, acceleration, leader):
+        """Return next-step gap minus a conservative stopping-distance gap."""
+        time_step = self.time_step
+        ego_acceleration = max(
+            -self.maximum_deceleration,
+            min(acceleration, self.maximum_acceleration),
+        )
+        leader_acceleration = max(
+            -leader.maximum_deceleration,
+            min(leader.acceleration, leader.maximum_acceleration),
+        )
+        ego_next_speed = max(
+            0.0,
+            self.speed + ego_acceleration * time_step,
+        )
+        leader_next_speed = max(
+            0.0,
+            leader.speed + leader_acceleration * time_step,
+        )
+        ego_displacement = 0.5 * (
+            self.speed + ego_next_speed
+        ) * time_step
+        leader_displacement = 0.5 * (
+            leader.speed + leader_next_speed
+        ) * time_step
+        ego_next_position = min(
+            self.road_length,
+            self.position + ego_displacement,
+        )
+        leader_next_position = min(
+            leader.road_length,
+            leader.position + leader_displacement,
+        )
+        next_gap = (
+            leader_next_position
+            - ego_next_position
+            - self.vehicle_length
+        )
+        reaction_distance = ego_next_speed * time_step
+        ego_stopping_distance = (
+            ego_next_speed**2 / (2.0 * self.maximum_deceleration)
+        )
+        leader_stopping_distance = (
+            leader_next_speed**2 / (2.0 * leader.maximum_deceleration)
+        )
+        required_gap = self.minimum_spacing + max(
+            0.0,
+            reaction_distance
+            + ego_stopping_distance
+            - leader_stopping_distance,
+        )
+        return next_gap - required_gap
 
     def _request_acceleration(self):
         payload = {
@@ -164,6 +262,9 @@ class DeepSeekLLMVehicle(IDMVehicle):
             raise ValueError("DeepSeek response exceeded the 1 MiB limit")
 
         completion = json.loads(response_body)
+        if not isinstance(completion, dict):
+            raise ValueError("DeepSeek response must be a JSON object")
+        self._record_token_usage(completion.get("usage"))
         content = completion["choices"][0]["message"]["content"]
         if not isinstance(content, str) or not content.strip():
             raise ValueError("DeepSeek returned an empty message")
@@ -187,6 +288,30 @@ class DeepSeekLLMVehicle(IDMVehicle):
             -self.maximum_deceleration,
             min(acceleration, self.maximum_acceleration),
         )
+
+    def _record_token_usage(self, usage):
+        if not isinstance(usage, dict):
+            self.usage_missing_request_count += 1
+            return
+
+        values = (
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+            usage.get("total_tokens"),
+        )
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value < 0
+            for value in values
+        ):
+            self.usage_missing_request_count += 1
+            return
+
+        self.prompt_tokens += values[0]
+        self.completion_tokens += values[1]
+        self.total_tokens += values[2]
+        self.usage_reported_request_count += 1
 
     def _use_idm_after_failure(self, reason):
         self._cached_acceleration = None

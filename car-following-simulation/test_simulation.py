@@ -67,6 +67,21 @@ class SimulationTests(unittest.TestCase):
         self.assertAlmostEqual(vehicle.position, 1.0075)
         self.assertAlmostEqual(vehicle.acceleration, 1.5)
 
+    def test_idm_accepts_a_target_speed_for_the_current_step(self):
+        vehicle = IDMVehicle(Config(time_max=1.0), vehicle_id=1)
+
+        vehicle.update_acceleration(desired_speed=10.0)
+
+        self.assertAlmostEqual(vehicle.acceleration, -8.0)
+
+    def test_zero_target_speed_keeps_a_stopped_vehicle_stopped(self):
+        vehicle = IDMVehicle(Config(time_max=1.0), vehicle_id=1)
+        vehicle.speed = 0.0
+
+        vehicle.update_acceleration(desired_speed=0.0)
+
+        self.assertEqual(vehicle.acceleration, 0.0)
+
     def test_simulation_is_reproducible_and_collision_free(self) -> None:
         first = self._run_signature()
         second = self._run_signature()
@@ -100,6 +115,73 @@ class SimulationTests(unittest.TestCase):
     def test_vehicle_factory_rejects_nonpositive_count(self):
         with self.assertRaisesRegex(ValueError, "llm_vehicle_count"):
             Simulator(Config(time_max=1.0), llm_vehicle_count=0)
+
+    def test_vehicle_generation_waits_for_safe_entry_braking_gap(self):
+        config = Config(time_max=1.0)
+        simulator = Simulator(config, safe_entry_gap=True)
+        front = IDMVehicle(config, vehicle_id=1)
+        front.position = 60.0
+        simulator.vehicles.append(front)
+
+        simulator._generate_vehicle(current_time=0.0)
+
+        self.assertEqual(len(simulator.vehicles), 1)
+
+        front.position = 70.0
+        simulator._generate_vehicle(current_time=0.0)
+
+        self.assertEqual(len(simulator.vehicles), 2)
+
+    def test_default_vehicle_entry_rule_remains_unchanged(self):
+        config = Config(time_max=1.0)
+        simulator = Simulator(config)
+        front = IDMVehicle(config, vehicle_id=1)
+        front.position = 40.0
+        simulator.vehicles.append(front)
+
+        simulator._generate_vehicle(current_time=0.0)
+
+        self.assertEqual(len(simulator.vehicles), 2)
+
+    def test_fleet_controller_actions_are_safety_filtered_before_motion(self):
+        class FakeFleetController:
+            def __init__(self):
+                self.filtered = []
+
+            def actions_for_step(self, vehicles, step):
+                return {
+                    vehicle.id: 10.0
+                    for vehicle in vehicles
+                }
+
+            def record_idm_fallback(self):
+                raise AssertionError("all vehicles received a fleet action")
+
+            def apply_safety_filter(self, vehicle, acceleration):
+                self.filtered.append(vehicle.id)
+                return acceleration
+
+        controller = FakeFleetController()
+        config = Config(time_max=0.1)
+        simulator = Simulator(config, fleet_controller=controller)
+        simulator.run(verbose=False)
+
+        self.assertEqual(controller.filtered, [1])
+        self.assertAlmostEqual(simulator.vehicles[0].history[-1]["speed"], 29.2)
+
+    def test_gap_metrics_record_minimum_gap_and_collision(self):
+        config = Config(time_max=1.0)
+        front = IDMVehicle(config, vehicle_id=1)
+        rear = IDMVehicle(config, vehicle_id=2, vehicle_front=front)
+        front.position = 10.0
+        rear.position = 5.5
+        simulator = Simulator(config)
+
+        simulator._record_gap_metrics([front, rear], current_time=0.1)
+
+        self.assertAlmostEqual(simulator.minimum_gap_observed, -0.5)
+        self.assertEqual(len(simulator.collision_events), 1)
+        self.assertEqual(simulator.collision_events[0]["time"], 0.1)
 
     def test_default_simulator_creates_only_idm_vehicles(self):
         config = Config(seed=1, experiment=1, time_max=5.0)

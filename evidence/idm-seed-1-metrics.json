@@ -1,0 +1,52 @@
+{
+  "run": {
+    "controller": "idm",
+    "model": null,
+    "seed": 1,
+    "experiment": 1,
+    "duration_s": 300.0,
+    "time_step_s": 0.1,
+    "road_length_m": 5000.0,
+    "speed_limit_mps": 30.0,
+    "vehicle_arrival_min_interval_s": 1.7,
+    "vehicle_arrival_extra_interval_s": 0.0,
+    "bottleneck": {
+      "start_x_m": 4500.0,
+      "end_x_m": 4700.0,
+      "start_time_s": 100.0,
+      "end_time_s": 300.0,
+      "speed_limit_mps": 2.0,
+      "influence_rate": 0.7
+    },
+    "safe_entry_gap": true,
+    "llm_first_vehicle_id": null,
+    "llm_vehicle_count": null,
+    "decision_interval_steps": null
+  },
+  "traffic": {
+    "generated_vehicle_count": 131,
+    "completed_vehicle_count": 8,
+    "vehicles_remaining_at_end": 123,
+    "throughput_vehicles_per_hour": 96.0,
+    "mean_completed_travel_time_s": 269.1125,
+    "median_completed_travel_time_s": 272.3,
+    "p95_completed_travel_time_s": 284.13,
+    "mean_speed_mps": 22.152965348576036,
+    "slow_time_fraction": 0.0,
+    "slow_speed_threshold_mps": 0.5,
+    "maximum_slow_vehicle_count": 0,
+    "maximum_slow_vehicle_span_m": 0.0
+  },
+  "safety": {
+    "observed_overlap_count": 0,
+    "minimum_observed_bumper_gap_m": 3.0337169545164215,
+    "minimum_gap_details": {
+      "gap": 3.0337169545164215,
+      "rear_vehicle_id": 42,
+      "front_vehicle_id": 41,
+      "time": 257.40000000000003
+    },
+    "gap_observations_below_minimum_spacing": 0
+  },
+  "controller_metrics": null
+}
